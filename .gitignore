@@ -1,0 +1,17 @@
+# Virtual environments
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Build and dist
+build/
+dist/
+
+# Logs
+*.log
+
+# IDE settings
+.vscode/
+.idea/
