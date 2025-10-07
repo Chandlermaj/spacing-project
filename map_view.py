@@ -7,7 +7,8 @@ import flet as ft
 from flet.plotly_chart import PlotlyChart
 
 MAPBOX_TOKEN = "pk.eyJ1IjoiY2hhbmRsZXJtYWoiLCJhIjoiY2xqbjV6N3gyMTIwbzNscW1ldXNrdGgybSJ9.dVuuiCN9yxDM8NMyE56qww"
-WELLS_ROOT = r"C:\Users\chand\Downloads\Spacing Project\Wells"
+import pathlib
+WELLS_ROOT = pathlib.Path(__file__).parent / "data" / "Wells"
 MAX_POINTS = 75000
 
 
