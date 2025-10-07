@@ -1,5 +1,7 @@
 # main.py
+from __future__ import annotations
 import os
+import subprocess
 import flet as ft
 import pandas as pd
 
@@ -8,8 +10,46 @@ from benches_ui import IntervalSelector
 from map_view import MapPanel
 
 APP_NAME = "Well Spacing"
-DEFAULT_WELLS_PATH = r"C:\Users\chand\Downloads\Spacing Project\Wells"
+DEFAULT_WELLS_PATH = os.path.join(os.getcwd(), "data", "Wells")
 
+
+# --------------------------
+# Kaggle dataset setup
+# --------------------------
+def ensure_kaggle_dataset():
+    """
+    Downloads the Kaggle dataset if it doesn't already exist locally.
+    Works both locally and on Render.
+    """
+    dataset = "chandlermajusiak/spacing-data"
+    data_path = os.path.join(os.getcwd(), "data")
+
+    wells_folder = os.path.join(data_path, "Wells")
+
+    # Only download if not already present
+    if not os.path.exists(wells_folder) or not os.listdir(wells_folder):
+        os.makedirs(data_path, exist_ok=True)
+        print("📦 Downloading dataset from Kaggle...")
+
+        # Make sure Kaggle is installed
+        subprocess.run(["pip", "install", "kaggle"], check=True)
+
+        # Download and unzip into /data
+        subprocess.run([
+            "kaggle", "datasets", "download",
+            "-d", dataset,
+            "--unzip",
+            "-p", data_path
+        ], check=True)
+
+        print("✅ Dataset downloaded and extracted successfully.")
+    else:
+        print("📂 Dataset already exists — skipping download.")
+
+
+# --------------------------
+# Main App
+# --------------------------
 def main(page: ft.Page):
     page.title = APP_NAME
     page.window_width = 1200
@@ -33,7 +73,7 @@ def main(page: ft.Page):
         width=320,
     )
 
-    # ✅ Map style dropdown (only visible on Map tab)
+    # ✅ Map style dropdown
     map_style_dd = ft.Dropdown(
         label="Map style",
         options=[
@@ -52,7 +92,7 @@ def main(page: ft.Page):
     benches_btn = ft.TextButton("△  Benches", tooltip="Benches (Alt+D)")
     map_btn = ft.TextButton("🗺️  Map", tooltip="Map (Alt+M)")
 
-    # Header rows
+    # Header layout
     top_controls_row = ft.Row(
         [name_tf, enter_btn, basin_dd, map_style_dd],
         spacing=12,
@@ -144,7 +184,7 @@ def main(page: ft.Page):
         enter_btn.visible = False
         set_status(f"Welcome, {name_tf.value}! Choose a basin or open the map.")
         page.update()
-        show_benches()  # ✅ open benches automatically
+        show_benches()
 
     enter_btn.on_click = enter_action
     name_tf.on_submit = enter_action
@@ -164,7 +204,7 @@ def main(page: ft.Page):
     def show_benches():
         nonlocal active_tab
         active_tab = "benches"
-        map_style_dd.visible = False  # hide map style
+        map_style_dd.visible = False
         basin = basin_dd.value
         ensure_benches_ui(basin)
         center_panel.content = interval_selector
@@ -175,7 +215,7 @@ def main(page: ft.Page):
     def show_map():
         nonlocal active_tab, map_panel
         active_tab = "map"
-        map_style_dd.visible = True  # ✅ show map style only here
+        map_style_dd.visible = True
         basin = basin_dd.value or "Anadarko"
         map_style = map_style_dd.value or "dark"
         map_panel = MapPanel(basin, map_style)
@@ -191,9 +231,15 @@ def main(page: ft.Page):
 
     # ---------- Layout ----------
     page.add(header_row, ft.Divider(), center_panel, status)
-
-    # ---------- Initial view ----------
     show_benches()
 
+
+# --------------------------
+# Run App
+# --------------------------
 if __name__ == "__main__":
+    # Step 1: Ensure Kaggle dataset is ready
+    ensure_kaggle_dataset()
+
+    # Step 2: Run Flet app
     ft.app(target=main)

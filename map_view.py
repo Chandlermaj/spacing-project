@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, threading, time
+import os, threading, time, pathlib
 import geopandas as gpd
 import pandas as pd
 import plotly.express as px
@@ -7,7 +7,6 @@ import flet as ft
 from flet.plotly_chart import PlotlyChart
 
 MAPBOX_TOKEN = "pk.eyJ1IjoiY2hhbmRsZXJtYWoiLCJhIjoiY2xqbjV6N3gyMTIwbzNscW1ldXNrdGgybSJ9.dVuuiCN9yxDM8NMyE56qww"
-import pathlib
 WELLS_ROOT = pathlib.Path(__file__).parent / "data" / "Wells"
 MAX_POINTS = 75000
 
@@ -58,6 +57,18 @@ def _load_shapefiles_fast(basin_name: str) -> pd.DataFrame:
     return df
 
 
+# ---------- Compatibility helper ----------
+def get_plotly_chart(fig, expand=True):
+    """Try to create an interactive PlotlyChart if supported by this Flet version."""
+    try:
+        return PlotlyChart(fig, interactive=True, expand=expand)
+    except TypeError:
+        # Fallback for Flet versions without the 'interactive' argument
+        print("⚠️ 'interactive' not supported in this Flet version — using fallback.")
+        return PlotlyChart(fig, expand=expand)
+
+
+# ---------- Main MapPanel ----------
 class MapPanel(ft.Container):
     """Interactive Mapbox map panel with persistent zoom and source toggles."""
 
@@ -186,8 +197,8 @@ class MapPanel(ft.Container):
             legend=dict(bgcolor="rgba(17,17,17,0.66)", font=dict(color="#ccc")),
         )
 
-        # ✅ Make the map fully interactive
-        self._chart_container.content = PlotlyChart(fig, expand=True, interactive=True)
+        # ✅ Use compatibility wrapper (interactive on web, fallback locally)
+        self._chart_container.content = get_plotly_chart(fig, expand=True)
         self.update()
 
         # Store for persistence
