@@ -18,33 +18,37 @@ DEFAULT_WELLS_PATH = os.path.join(os.getcwd(), "data", "Wells")
 # --------------------------
 def ensure_kaggle_dataset():
     """
-    Downloads the Kaggle dataset if it doesn't already exist locally.
-    Works both locally and on Render.
+    Downloads the Kaggle dataset if not already available.
+    Works locally and on Render (requires KAGGLE_USERNAME and KAGGLE_KEY environment variables).
     """
     dataset = "chandlermajusiak/spacing-data"
     data_path = os.path.join(os.getcwd(), "data")
-
     wells_folder = os.path.join(data_path, "Wells")
 
-    # Only download if not already present
-    if not os.path.exists(wells_folder) or not os.listdir(wells_folder):
-        os.makedirs(data_path, exist_ok=True)
-        print("📦 Downloading dataset from Kaggle...")
-
-        # Make sure Kaggle is installed
-        subprocess.run(["pip", "install", "kaggle"], check=True)
-
-        # Download and unzip into /data
-        subprocess.run([
-            "kaggle", "datasets", "download",
-            "-d", dataset,
-            "--unzip",
-            "-p", data_path
-        ], check=True)
-
-        print("✅ Dataset downloaded and extracted successfully.")
-    else:
+    if os.path.exists(wells_folder) and os.listdir(wells_folder):
         print("📂 Dataset already exists — skipping download.")
+        return
+
+    os.makedirs(data_path, exist_ok=True)
+    print("📦 Downloading dataset from Kaggle...")
+
+    # Ensure kaggle CLI is installed
+    subprocess.run(["pip", "install", "kaggle"], check=True)
+
+    # Verify Kaggle credentials
+    if not os.getenv("KAGGLE_USERNAME") or not os.getenv("KAGGLE_KEY"):
+        raise EnvironmentError("❌ Kaggle credentials missing — set KAGGLE_USERNAME and KAGGLE_KEY.")
+
+    # Download and unzip dataset
+    subprocess.run([
+        "kaggle", "datasets", "download",
+        "-d", dataset,
+        "--unzip",
+        "-p", data_path
+    ], check=True)
+
+    print("✅ Dataset downloaded and extracted successfully.")
+
 
 
 # --------------------------
