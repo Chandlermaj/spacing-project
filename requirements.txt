@@ -1,0 +1,7 @@
+flet
+pandas
+geopandas
+plotly
+matplotlib
+shapely
+pyproj
