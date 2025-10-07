@@ -9,46 +9,52 @@ from benches_data import load_benches, basins_list, benches_for_basin
 from benches_ui import IntervalSelector
 from map_view import MapPanel
 
+
 APP_NAME = "Well Spacing"
 DEFAULT_WELLS_PATH = os.path.join(os.getcwd(), "data", "Wells")
 
 
 # --------------------------
-# Kaggle dataset setup
+# On-Demand Basin Downloader
 # --------------------------
-def ensure_kaggle_dataset():
+def download_basin_data(basin_name: str):
     """
-    Downloads the Kaggle dataset if not already available.
-    Works locally and on Render (requires KAGGLE_USERNAME and KAGGLE_KEY environment variables).
+    Downloads a single basin's data from Kaggle if it's not already present.
+    Keeps Render lightweight by fetching only when needed.
     """
     dataset = "chandlermajusiak/spacing-data"
-    data_path = os.path.join(os.getcwd(), "data")
-    wells_folder = os.path.join(data_path, "Wells")
+    basin_folder = os.path.join("data", "Wells", basin_name)
 
-    if os.path.exists(wells_folder) and os.listdir(wells_folder):
-        print("📂 Dataset already exists — skipping download.")
+    if os.path.exists(basin_folder) and os.listdir(basin_folder):
+        print(f"📂 {basin_name} already downloaded — skipping.")
         return
 
-    os.makedirs(data_path, exist_ok=True)
-    print("📦 Downloading dataset from Kaggle...")
+    print(f"📦 Downloading {basin_name} data from Kaggle...")
 
-    # Ensure kaggle CLI is installed
+    os.makedirs("data/Wells", exist_ok=True)
     subprocess.run(["pip", "install", "kaggle"], check=True)
 
-    # Verify Kaggle credentials
     if not os.getenv("KAGGLE_USERNAME") or not os.getenv("KAGGLE_KEY"):
-        raise EnvironmentError("❌ Kaggle credentials missing — set KAGGLE_USERNAME and KAGGLE_KEY.")
+        raise EnvironmentError("❌ Missing Kaggle credentials — set KAGGLE_USERNAME and KAGGLE_KEY.")
 
-    # Download and unzip dataset
+    # Download the full zip (contains all basins)
     subprocess.run([
         "kaggle", "datasets", "download",
         "-d", dataset,
         "--unzip",
-        "-p", data_path
+        "-p", "data"
     ], check=True)
 
-    print("✅ Dataset downloaded and extracted successfully.")
+    # Optionally remove other basins to save space
+    wells_root = os.path.join("data", "Wells")
+    for folder in os.listdir(wells_root):
+        if folder.lower() != basin_name.lower():
+            folder_path = os.path.join(wells_root, folder)
+            if os.path.isdir(folder_path):
+                print(f"🧹 Removing unused basin: {folder}")
+                subprocess.run(["rm", "-rf", folder_path])
 
+    print(f"✅ {basin_name} data downloaded successfully.")
 
 
 # --------------------------
@@ -171,6 +177,10 @@ def main(page: ft.Page):
             set_status("Select a basin to view intervals.")
             page.update()
             return
+
+        # ⬇️ NEW: download basin data only when selected
+        download_basin_data(basin)
+
         ensure_benches_ui(basin)
         if active_tab == "benches":
             center_panel.content = interval_selector
@@ -242,8 +252,5 @@ def main(page: ft.Page):
 # Run App
 # --------------------------
 if __name__ == "__main__":
-    # Step 1: Ensure Kaggle dataset is ready
-    ensure_kaggle_dataset()
-
-    # Step 2: Run Flet app
+    # 💡 No full dataset download on startup — only fetch when basin selected
     ft.app(target=main)
