@@ -8,13 +8,34 @@ import pandas as pd
 from benches_data import load_benches, basins_list, benches_for_basin
 from benches_ui import IntervalSelector
 from map_view import MapPanel
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
+from fastapi.responses import JSONResponse
+import geojson
 
+# Create the FastAPI app
 app = FastAPI()
 
+# Base route (just for testing)
 @app.get("/")
 def home():
     return {"message": "Hello from Railway!"}
+
+# Wells route (Mapbox will call this)
+@app.get("/wells")
+def get_wells(bbox: str = Query(...)):
+    """
+    Return GeoJSON wells within the map bounding box.
+    bbox format: "lon_min,lat_min,lon_max,lat_max"
+    """
+    lon1, lat1, lon2, lat2 = map(float, bbox.split(","))
+
+    # Temporary mock points for now (you'll replace with real Supabase/PostGIS query later)
+    features = [
+        geojson.Feature(geometry=geojson.Point((lon1, lat1))),
+        geojson.Feature(geometry=geojson.Point((lon2, lat2))),
+    ]
+
+    return geojson.FeatureCollection(features)
 
 
 APP_NAME = "Well Spacing"
