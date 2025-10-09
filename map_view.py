@@ -8,22 +8,22 @@ from flet.plotly_chart import PlotlyChart
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 
+
 # ---------- Safe PlotlyChart helper ----------
 def get_plotly_chart(fig, expand=True, on_event=None):
-    """Always uses interactive fallback to avoid Kaleido."""
+    """Create PlotlyChart safely for old Flet versions (no Kaleido / no interactive)."""
     try:
-        chart = PlotlyChart(fig, interactive=True, expand=expand)
+        chart = PlotlyChart(fig, expand=expand)  # ← no “interactive” arg
     except Exception as e:
-        print(f"⚠️ Fallback PlotlyChart (no Kaleido): {e}")
-        chart = ft.Text("Interactive map unavailable — Chrome missing.", color="#ccc")
-    if hasattr(chart, "on_plotly_event") and on_event:
-        chart.on_plotly_event = on_event
+        print(f"⚠️ PlotlyChart fallback: {e}")
+        chart = ft.Text("Map rendering unavailable — PlotlyChart error.", color="#ccc")
+    # Older builds don’t support event binding; ignore on_event silently
     return chart
 
 
 # ---------- Map Panel ----------
 class MapPanel(ft.Container):
-    """Interactive Mapbox map (no Kaleido dependency)."""
+    """Interactive Mapbox scatter plot (no Kaleido, works on flet-web 0.28)."""
 
     def __init__(self, basin_name: str = "Delaware", map_style: str = "dark"):
         super().__init__(expand=True, padding=0)
@@ -46,6 +46,8 @@ class MapPanel(ft.Container):
 
         # Draw placeholder map
         self._draw_map([])
+
+        # Load wells asynchronously
         threading.Thread(
             target=self._load_visible_wells_thread,
             args=(self._current_bbox,),
@@ -63,7 +65,7 @@ class MapPanel(ft.Container):
         bbox_str = ",".join(map(str, bbox))
         api_url = os.getenv("API_URL", "http://127.0.0.1:8000")
         if not api_url.startswith("http"):
-            api_url = "https://" + api_url
+            api_url = "https://" + api_url  # ensure valid URL
 
         url = f"{api_url}/wells_bbox?bbox={bbox_str}"
         print(f"📡 Fetching wells for bbox {bbox_str} from {url}")
@@ -85,6 +87,7 @@ class MapPanel(ft.Container):
         lats = [float(w["Latitude"]) for w in wells if w.get("Latitude")]
         lons = [float(w["Longitude"]) for w in wells if w.get("Longitude")]
         points = list(zip(lats, lons))
+
         print(f"✅ Loaded {len(points)} wells")
         self._draw_map(points)
 
@@ -114,39 +117,12 @@ class MapPanel(ft.Container):
                 ),
                 margin=dict(l=0, r=0, t=0, b=0),
             )
-            self._chart_container.content = get_plotly_chart(
-                fig, expand=True, on_event=self._on_map_event
-            )
+            self._chart_container.content = get_plotly_chart(fig, expand=True)
         except Exception as e:
-            print(f"⚠️ Failed to render Plotly map: {e}")
+            print(f"⚠️ Plotly rendering failed: {e}")
             self._chart_container.content = ft.Text(
-                "Map rendering unavailable — Plotly error.", color="#ccc"
+                "Map rendering unavailable.", color="#ccc"
             )
 
         if self.page:
             self.update()
-
-    # ---------------- Event Handling ----------------
-    def _on_map_event(self, e):
-        if not e.data or "relayoutData" not in e.data:
-            return
-        layout = e.data["relayoutData"]
-
-        if "mapbox._derived" in layout:
-            try:
-                derived = layout["mapbox._derived"]
-                lon_min, lat_min, lon_max, lat_max = (
-                    derived["coordinates"][0][0],
-                    derived["coordinates"][1][1],
-                    derived["coordinates"][2][0],
-                    derived["coordinates"][0][1],
-                )
-                self._current_bbox = [lon_min, lat_min, lon_max, lat_max]
-                print(f"🗺️ Map moved — new bbox: {self._current_bbox}")
-                threading.Thread(
-                    target=self._load_visible_wells_thread,
-                    args=(self._current_bbox,),
-                    daemon=True,
-                ).start()
-            except Exception as ex:
-                print(f"⚠️ Bbox parse failed: {ex}")

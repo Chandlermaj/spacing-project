@@ -121,7 +121,6 @@ def main(page: ft.Page):
         map_panel = MapPanel(basin, style)
         center_panel.content = map_panel
         page.update()          # ✅ must update first
-        map_panel.load()       # ✅ safe to call after page.update()
 
     benches_btn.on_click = show_benches
     map_btn.on_click = show_map
