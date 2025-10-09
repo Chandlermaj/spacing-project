@@ -11,10 +11,10 @@ from benches_ui import IntervalSelector
 from map_view import MapPanel
 
 # ------------------------------------------------------------------
-# 1. Load environment variables (Railway will inject automatically)
+# 1. Load environment variables
 # ------------------------------------------------------------------
 from dotenv import load_dotenv
-load_dotenv()  # helps locally, Railway already injects these
+load_dotenv()  # Helps locally; Railway injects automatically
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
@@ -32,11 +32,10 @@ print(f"🔍 API_URL = {API_URL}")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 # ------------------------------------------------------------------
-# 3. FastAPI Setup
+# 3. FastAPI setup
 # ------------------------------------------------------------------
 app = FastAPI(title="Spacing Project API")
 
-# Allow all origins (for Mapbox front-end)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -45,19 +44,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Test route
 @app.get("/")
 def home():
     return {"message": "Hello from Railway + Supabase!"}
 
+
 # ------------------------------------------------------------------
-# 4. Wells Endpoint (live from Supabase)
+# 4. Wells endpoint (live from Supabase)
 # ------------------------------------------------------------------
 @app.get("/wells")
 def get_wells(limit: int = 1000):
-    """
-    Return well data from Supabase.
-    """
+    """Return well data from Supabase."""
     print("📡 Fetching wells from Supabase...")
     try:
         response = supabase.table("wells").select("*").limit(limit).execute()
@@ -67,6 +64,7 @@ def get_wells(limit: int = 1000):
     except Exception as e:
         print(f"❌ Supabase fetch error: {e}")
         return {"error": str(e)}
+
 
 # ------------------------------------------------------------------
 # 5. Flet UI App
@@ -83,6 +81,7 @@ def main(page: ft.Page):
     page.scroll = ft.ScrollMode.AUTO
 
     benches_df = load_benches()
+
     basin_dd = ft.Dropdown(
         label="Basin",
         options=[ft.dropdown.Option(b) for b in basins_list(benches_df)],
@@ -90,7 +89,6 @@ def main(page: ft.Page):
         width=320,
     )
 
-    # Map and Benches UI
     map_style_dd = ft.Dropdown(
         label="Map Style",
         options=[
@@ -107,24 +105,32 @@ def main(page: ft.Page):
     map_btn = ft.TextButton("🗺️ Map")
     center_panel = ft.Container(expand=True)
 
+    # ---------- Show Benches ----------
     def show_benches(e=None):
         subset = benches_for_basin(benches_df, basin_dd.value)
         interval_selector = IntervalSelector(rows=subset.to_dict("records"))
         center_panel.content = interval_selector
         page.update()
 
+    # ---------- Show Map ----------
     def show_map(e=None):
-        map_panel = MapPanel(map_style_dd.value)
+        basin = basin_dd.value or DEFAULT_BASIN
+        style = map_style_dd.value or "dark"
+
+        # Create and display the map panel
+        map_panel = MapPanel(basin, style)
         center_panel.content = map_panel
-        page.update()
+        page.update()          # ✅ must update first
+        map_panel.load()       # ✅ safe to call after page.update()
 
     benches_btn.on_click = show_benches
     map_btn.on_click = show_map
 
-    # Layout
     header = ft.Row([basin_dd, map_style_dd, benches_btn, map_btn], spacing=12)
     page.add(header, ft.Divider(), center_panel)
-    show_map()  # start with map
+
+    # ✅ Start safely with map
+    show_map()
 
 # ------------------------------------------------------------------
 # 6. Run App
