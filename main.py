@@ -17,6 +17,16 @@ from fastapi.middleware.cors import CORSMiddleware
 # Create the FastAPI app
 app = FastAPI()
 
+# Allow requests from any origin (you can restrict later)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Or restrict to ["http://localhost", "https://yourfrontend.com"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # Base route (just for testing)
 @app.get("/")
 def home():
