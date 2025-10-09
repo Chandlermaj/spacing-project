@@ -2,19 +2,41 @@ from __future__ import annotations
 import os
 import flet as ft
 import pandas as pd
+import geojson
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from supabase import create_client, Client
 from benches_data import load_benches, basins_list, benches_for_basin
 from benches_ui import IntervalSelector
 from map_view import MapPanel
 
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from supabase import create_client, Client
+# ------------------------------------------------------------------
+# 1. Load environment variables (Railway will inject automatically)
+# ------------------------------------------------------------------
+from dotenv import load_dotenv
+load_dotenv()  # helps locally, Railway already injects these
 
-# --- FastAPI app ---
-app = FastAPI()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
+API_URL = os.getenv("API_URL")
 
-# Allow cross-origin requests (for Flet/Mapbox)
+print(f"🔍 SUPABASE_URL = {SUPABASE_URL}")
+print(f"🔍 SUPABASE_SERVICE_KEY starts with: {str(SUPABASE_SERVICE_KEY)[:10]}")
+print(f"🔍 MAPBOX_TOKEN starts with: {str(MAPBOX_TOKEN)[:8]}")
+print(f"🔍 API_URL = {API_URL}")
+
+# ------------------------------------------------------------------
+# 2. Initialize Supabase client
+# ------------------------------------------------------------------
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+# ------------------------------------------------------------------
+# 3. FastAPI Setup
+# ------------------------------------------------------------------
+app = FastAPI(title="Spacing Project API")
+
+# Allow all origins (for Mapbox front-end)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,131 +45,89 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Supabase connection ---
-SUPABASE_URL = os.getenv("https://kjaevdkcvucazcyaapry.supabase.co")
-SUPABASE_SERVICE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqYWV2ZGtjdnVjYXpjeWFhcHJ5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTkwNDgyNywiZXhwIjoyMDc1NDgwODI3fQ.J-sEleEXff1D2vLyEYogVXEqWr3OsE7bs8Uol0tVy70")
-print("🔍 SUPABASE_URL =", repr(SUPABASE_URL))
-print("🔍 SUPABASE_SERVICE_KEY starts with:", SUPABASE_SERVICE_KEY[:10] if SUPABASE_SERVICE_KEY else None)
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
-# --- Root route (sanity check) ---
+# Test route
 @app.get("/")
 def home():
-    return {"message": "Spacing Project API is live"}
+    return {"message": "Hello from Railway + Supabase!"}
 
-# --- Bounding-box query route ---
-@app.get("/wells_bbox")
-def wells_bbox(bbox: str = Query(...)):
+# ------------------------------------------------------------------
+# 4. Wells Endpoint (live from Supabase)
+# ------------------------------------------------------------------
+@app.get("/wells")
+def get_wells(limit: int = 1000):
     """
-    Return wells inside the map's bounding box.
-    bbox format: 'lon_min,lat_min,lon_max,lat_max'
+    Return well data from Supabase.
     """
-    lon1, lat1, lon2, lat2 = map(float, bbox.split(","))
-
-    sql = f"""
-        SELECT "API_UWI","Latitude","Longitude"
-        FROM wells
-        WHERE geom && ST_MakeEnvelope({lon1},{lat1},{lon2},{lat2},4326)
-        LIMIT 5000;
-    """
-
+    print("📡 Fetching wells from Supabase...")
     try:
-        data = supabase.rpc("execute_sql", {"sql": sql}).execute().data
-        return JSONResponse(data)
+        response = supabase.table("wells").select("*").limit(limit).execute()
+        data = response.data or []
+        print(f"✅ Retrieved {len(data)} wells")
+        return {"count": len(data), "data": data}
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        print(f"❌ Supabase fetch error: {e}")
+        return {"error": str(e)}
 
-
-# -----------------  Flet GUI  -----------------
-
+# ------------------------------------------------------------------
+# 5. Flet UI App
+# ------------------------------------------------------------------
 APP_NAME = "Well Spacing"
+DEFAULT_BASIN = "Delaware"
 
 def main(page: ft.Page):
     page.title = APP_NAME
-    page.theme_mode = ft.ThemeMode.DARK
+    page.window_width = 1200
+    page.window_height = 780
     page.padding = 16
+    page.theme_mode = ft.ThemeMode.DARK
     page.scroll = ft.ScrollMode.AUTO
 
-    # Header
-    title = ft.Text(APP_NAME, size=28, weight=ft.FontWeight.BOLD)
-    subtitle1 = ft.Text("Created by Chandler Majusiak", size=16)
-    subtitle2 = ft.Text("Version 1.0", size=12, italic=True)
-
     benches_df = load_benches()
-
     basin_dd = ft.Dropdown(
         label="Basin",
         options=[ft.dropdown.Option(b) for b in basins_list(benches_df)],
+        value=DEFAULT_BASIN,
         width=320,
     )
 
+    # Map and Benches UI
     map_style_dd = ft.Dropdown(
         label="Map Style",
         options=[
             ft.dropdown.Option("dark"),
             ft.dropdown.Option("streets"),
             ft.dropdown.Option("satellite"),
-            ft.dropdown.Option("light"),
             ft.dropdown.Option("outdoors"),
-            ft.dropdown.Option("satellite-streets"),
         ],
         value="dark",
         width=250,
-        visible=False,
     )
 
-    benches_btn = ft.TextButton("△  Benches")
-    map_btn = ft.TextButton("🗺️  Map")
-
-    header_row = ft.Row(
-        [ft.Column([title, subtitle1, subtitle2]), ft.Row([benches_btn, map_btn])],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-    )
-
-    # Main container
+    benches_btn = ft.TextButton("△ Benches")
+    map_btn = ft.TextButton("🗺️ Map")
     center_panel = ft.Container(expand=True)
-    status_text = ft.Text("Ready", color="#FFFFFF")
-    status = ft.Container(content=status_text, bgcolor="#1F3B57", padding=10, border_radius=6)
 
-    def set_status(msg: str):
-        status_text.value = msg
-        status_text.update()
-
-    # Tabs logic
-    active_tab = "benches"
-    interval_selector: IntervalSelector | None = None
-    map_panel: MapPanel | None = None
-
-    def show_benches():
-        nonlocal active_tab, interval_selector
-        active_tab = "benches"
-        map_style_dd.visible = False
-        basin = basin_dd.value
-        if interval_selector is None:
-            interval_selector = IntervalSelector(rows=[], on_change=lambda x: None, panel_height=400)
+    def show_benches(e=None):
+        subset = benches_for_basin(benches_df, basin_dd.value)
+        interval_selector = IntervalSelector(rows=subset.to_dict("records"))
         center_panel.content = interval_selector
         page.update()
-        set_status(f"Benches view ({basin or 'none'})")
 
-    def show_map():
-        nonlocal active_tab, map_panel
-        active_tab = "map"
-        map_style_dd.visible = True
-        map_style = map_style_dd.value or "dark"
-        map_panel = MapPanel(map_style)
+    def show_map(e=None):
+        map_panel = MapPanel(map_style_dd.value)
         center_panel.content = map_panel
         page.update()
 
-        # initial bbox around Delaware (can be changed later)
-        bbox = [-106, 31, -101, 35]
-        map_panel.load_visible_wells(bbox)
-        set_status("Map loaded from Supabase")
+    benches_btn.on_click = show_benches
+    map_btn.on_click = show_map
 
-    benches_btn.on_click = lambda e: show_benches()
-    map_btn.on_click = lambda e: show_map()
+    # Layout
+    header = ft.Row([basin_dd, map_style_dd, benches_btn, map_btn], spacing=12)
+    page.add(header, ft.Divider(), center_panel)
+    show_map()  # start with map
 
-    page.add(header_row, ft.Divider(), center_panel, status)
-
-# Run app
+# ------------------------------------------------------------------
+# 6. Run App
+# ------------------------------------------------------------------
 if __name__ == "__main__":
     ft.app(target=main)
