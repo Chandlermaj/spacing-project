@@ -16,11 +16,14 @@ COPY . .
 # 6. Expose the port FastAPI will use
 EXPOSE 8000
 
-# --- Force inject Railway environment variables ---
+# 7. Set environment variables (Railway injects, but define fallback for local)
+ENV PYTHONUNBUFFERED=1
+
+# --- Force inject Railway environment variables (for debugging) ---
 ENV SUPABASE_URL=${SUPABASE_URL}
 ENV SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
 ENV MAPBOX_TOKEN=${MAPBOX_TOKEN}
 ENV API_URL=${API_URL}
 
-# 7. Start the FastAPI app
+# 8. Start the FastAPI app (main.py)
 CMD ["python", "main.py"]
