@@ -11,3 +11,4 @@ uvicorn[standard]
 psycopg2-binary
 geojson
 requests
+supabase
