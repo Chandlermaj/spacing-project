@@ -11,6 +11,8 @@ from map_view import MapPanel
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import geojson
+from fastapi.middleware.cors import CORSMiddleware
+
 
 # Create the FastAPI app
 app = FastAPI()
