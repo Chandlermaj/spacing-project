@@ -4,64 +4,55 @@ import os
 import subprocess
 import flet as ft
 import pandas as pd
-
+import geojson
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 from benches_data import load_benches, basins_list, benches_for_basin
 from benches_ui import IntervalSelector
 from map_view import MapPanel
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
-import geojson
-from fastapi.middleware.cors import CORSMiddleware
 
 
-# Create the FastAPI app
+# --------------------------
+# FastAPI Backend (for Mapbox or API requests)
+# --------------------------
 app = FastAPI()
 
-# Allow requests from any origin (you can restrict later)
+# Allow requests from any frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Or restrict to ["http://localhost", "https://yourfrontend.com"]
+    allow_origins=["*"],  # You can later restrict this to specific domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# Base route (just for testing)
 @app.get("/")
 def home():
     return {"message": "Hello from Railway!"}
 
-# Wells route (Mapbox will call this)
 @app.get("/wells")
 def get_wells(bbox: str = Query(...)):
     """
-    Return GeoJSON wells within the map bounding box.
+    Temporary demo route returning GeoJSON points for bounding box.
     bbox format: "lon_min,lat_min,lon_max,lat_max"
     """
     lon1, lat1, lon2, lat2 = map(float, bbox.split(","))
-
-    # Temporary mock points for now (you'll replace with real Supabase/PostGIS query later)
     features = [
         geojson.Feature(geometry=geojson.Point((lon1, lat1))),
         geojson.Feature(geometry=geojson.Point((lon2, lat2))),
     ]
-
     return geojson.FeatureCollection(features)
 
 
+# --------------------------
+# Flet Frontend Application
+# --------------------------
 APP_NAME = "Well Spacing"
 DEFAULT_WELLS_PATH = os.path.join(os.getcwd(), "data", "Wells")
 
 
-# --------------------------
-# On-Demand Basin Downloader
-# --------------------------
 def download_basin_data(basin_name: str):
-    """
-    Downloads a single basin's data from Kaggle if it's not already present.
-    Keeps Render lightweight by fetching only when needed.
-    """
+    """Downloads a single basin’s data from Kaggle if not present."""
     dataset = "chandlermajusiak/spacing-data"
     basin_folder = os.path.join("data", "Wells", basin_name)
 
@@ -70,14 +61,12 @@ def download_basin_data(basin_name: str):
         return
 
     print(f"📦 Downloading {basin_name} data from Kaggle...")
-
     os.makedirs("data/Wells", exist_ok=True)
     subprocess.run(["pip", "install", "kaggle"], check=True)
 
     if not os.getenv("KAGGLE_USERNAME") or not os.getenv("KAGGLE_KEY"):
         raise EnvironmentError("❌ Missing Kaggle credentials — set KAGGLE_USERNAME and KAGGLE_KEY.")
 
-    # Download the full zip (contains all basins)
     subprocess.run([
         "kaggle", "datasets", "download",
         "-d", dataset,
@@ -85,7 +74,6 @@ def download_basin_data(basin_name: str):
         "-p", "data"
     ], check=True)
 
-    # Optionally remove other basins to save space
     wells_root = os.path.join("data", "Wells")
     for folder in os.listdir(wells_root):
         if folder.lower() != basin_name.lower():
@@ -97,9 +85,6 @@ def download_basin_data(basin_name: str):
     print(f"✅ {basin_name} data downloaded successfully.")
 
 
-# --------------------------
-# Main App
-# --------------------------
 def main(page: ft.Page):
     page.title = APP_NAME
     page.window_width = 1200
@@ -123,7 +108,7 @@ def main(page: ft.Page):
         width=320,
     )
 
-    # ✅ Map style dropdown
+    # Map style dropdown
     map_style_dd = ft.Dropdown(
         label="Map style",
         options=[
@@ -142,7 +127,6 @@ def main(page: ft.Page):
     benches_btn = ft.TextButton("△  Benches", tooltip="Benches (Alt+D)")
     map_btn = ft.TextButton("🗺️  Map", tooltip="Map (Alt+M)")
 
-    # Header layout
     top_controls_row = ft.Row(
         [name_tf, enter_btn, basin_dd, map_style_dd],
         spacing=12,
@@ -218,9 +202,7 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # ⬇️ NEW: download basin data only when selected
         download_basin_data(basin)
-
         ensure_benches_ui(basin)
         if active_tab == "benches":
             center_panel.content = interval_selector
@@ -270,14 +252,12 @@ def main(page: ft.Page):
         nonlocal active_tab, map_panel
         active_tab = "map"
         map_style_dd.visible = True
-        basin = basin_dd.value or "Anadarko"
         map_style = map_style_dd.value or "dark"
-        map_panel = MapPanel(basin, map_style)
+        map_panel = MapPanel(map_style)
         center_panel.content = map_panel
-        page.update()
-        map_panel.load()
-        set_status(f"Map view loaded for {basin}")
         style_nav()
+        set_status("Map view active")
+        page.update()
 
     benches_btn.on_click = lambda e: show_benches()
     map_btn.on_click = lambda e: show_map()
@@ -292,5 +272,4 @@ def main(page: ft.Page):
 # Run App
 # --------------------------
 if __name__ == "__main__":
-    # 💡 No full dataset download on startup — only fetch when basin selected
     ft.app(target=main)
