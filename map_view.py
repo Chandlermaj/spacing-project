@@ -1,18 +1,23 @@
 from __future__ import annotations
-import flet as ft
-from flet.plotly_chart import PlotlyChart
-import plotly.express as px
-import requests
 import os
 import threading
-import time
+import requests
+import flet as ft
+import plotly.express as px
+import plotly.io as pio
+from flet.plotly_chart import PlotlyChart
+
+# ----------------------------------------------------------------------
+#  Disable Kaleido static image export (prevents Chrome errors on Railway)
+# ----------------------------------------------------------------------
+pio.kaleido.scope.default_format = None
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 
 
-# ---------- Helper ----------
+# ---------- PlotlyChart helper ----------
 def get_plotly_chart(fig, expand=True, on_event=None):
-    """Compatibility wrapper for PlotlyChart (interactive or fallback)."""
+    """Wrapper to create PlotlyChart safely across environments."""
     try:
         chart = PlotlyChart(fig, interactive=True, expand=expand)
     except TypeError:
@@ -24,18 +29,15 @@ def get_plotly_chart(fig, expand=True, on_event=None):
     return chart
 
 
-# ---------- Main Map Panel ----------
+# ---------- Map Panel ----------
 class MapPanel(ft.Container):
-    """
-    Map view panel that auto-fetches wells from Supabase API
-    when panned or zoomed. Matches main.py call: MapPanel(basin_name, map_style)
-    """
+    """Interactive Mapbox map that fetches wells from Supabase API."""
 
     def __init__(self, basin_name: str = "Delaware", map_style: str = "dark"):
         super().__init__(expand=True, padding=0)
         self.basin_name = basin_name
         self.map_style = map_style
-        self._current_bbox = [-106, 31, -101, 35]  # Default Delaware area
+        self._current_bbox = [-106, 31, -101, 35]  # Default Delaware view
         self._chart_container = ft.Container(width=1000, height=600)
 
         # Header
@@ -52,19 +54,19 @@ class MapPanel(ft.Container):
             expand=True,
         )
 
-        # Draw initial map (no data yet)
+        # Draw blank map initially
         self._draw_map([])
 
-        # Load wells async (threaded)
+        # Load wells asynchronously
         threading.Thread(
             target=self._load_visible_wells_thread,
             args=(self._current_bbox,),
             daemon=True,
         ).start()
 
-    # ---------------------- Data fetch ----------------------
+    # ---------------- Data Fetch ----------------
     def _load_visible_wells_thread(self, bbox):
-        """Run in background thread to avoid blocking UI."""
+        """Background thread to fetch wells without blocking UI."""
         try:
             self.load_visible_wells(bbox)
         except Exception as e:
@@ -73,8 +75,10 @@ class MapPanel(ft.Container):
     def load_visible_wells(self, bbox):
         bbox_str = ",".join(map(str, bbox))
         api_url = os.getenv("API_URL", "http://127.0.0.1:8000")
-        url = f"{api_url}/wells_bbox?bbox={bbox_str}"
+        if not api_url.startswith("http"):
+            api_url = "https://" + api_url  # ✅ ensure valid URL scheme
 
+        url = f"{api_url}/wells_bbox?bbox={bbox_str}"
         print(f"📡 Fetching wells for bbox {bbox_str} from {url}")
 
         try:
@@ -98,9 +102,9 @@ class MapPanel(ft.Container):
         print(f"✅ Loaded {len(points)} wells")
         self._draw_map(points)
 
-    # ---------------------- Map drawing ----------------------
+    # ---------------- Map Drawing ----------------
     def _draw_map(self, points):
-        """Render map with given well coordinates."""
+        """Render Plotly mapbox scatter."""
         if points:
             lats, lons = zip(*points)
         else:
@@ -126,17 +130,23 @@ class MapPanel(ft.Container):
             margin=dict(l=0, r=0, t=0, b=0),
         )
 
-        self._chart_container.content = get_plotly_chart(
-            fig, expand=True, on_event=self._on_map_event
-        )
+        try:
+            self._chart_container.content = get_plotly_chart(
+                fig, expand=True, on_event=self._on_map_event
+            )
+        except Exception as ex:
+            print(f"⚠️ Plotly fallback (no Chrome): {ex}")
+            self._chart_container.content = ft.Text(
+                "Interactive map unavailable — Chrome missing.",
+                color="#ccc",
+            )
 
-        # Only update if attached to page
         if self.page:
             self.update()
 
-    # ---------------------- Event handling ----------------------
+    # ---------------- Map Event Handling ----------------
     def _on_map_event(self, e):
-        """Triggered when user pans/zooms the map."""
+        """Triggered on pan/zoom — refetch wells for new bounding box."""
         if not e.data or "relayoutData" not in e.data:
             return
         layout = e.data["relayoutData"]
