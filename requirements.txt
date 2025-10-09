@@ -6,3 +6,7 @@ matplotlib
 shapely
 pyproj
 kaleido
+fastapi
+uvicorn[standard]
+psycopg2-binary
+geojson
