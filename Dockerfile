@@ -19,3 +19,9 @@ EXPOSE 8000
 # 7. Start the FastAPI app
 CMD ["python", "main.py"]
 
+# --- Force inject Railway environment variables ---
+ENV SUPABASE_URL=${SUPABASE_URL}
+ENV SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+ENV MAPBOX_TOKEN=${MAPBOX_TOKEN}
+ENV API_URL=${API_URL}
+
