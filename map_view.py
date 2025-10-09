@@ -5,13 +5,7 @@ import pandas as pd
 import plotly.express as px
 import flet as ft
 from flet.plotly_chart import PlotlyChart
-from fastapi import FastAPI
 
-app = FastAPI()
-
-@app.get("/")
-def home():
-    return {"message": "Hello from Railway!"}
 
 MAPBOX_TOKEN = "pk.eyJ1IjoiY2hhbmRsZXJtYWoiLCJhIjoiY2xqbjV6N3gyMTIwbzNscW1ldXNrdGgybSJ9.dVuuiCN9yxDM8NMyE56qww"
 WELLS_ROOT = pathlib.Path(__file__).parent / "data" / "Wells"
