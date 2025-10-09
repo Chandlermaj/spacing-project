@@ -69,28 +69,15 @@ def get_plotly_chart(fig, expand=True):
         return PlotlyChart(fig, expand=expand)
 
 
-# ---------- Main MapPanel ----------
+# ---------- Simple MapPanel (no shapefiles) ----------
 class MapPanel(ft.Container):
-    """Interactive Mapbox map panel with persistent zoom and source toggles."""
+    """Simple static Mapbox map in Flet."""
 
-    def __init__(self, basin_name: str, map_style: str = "dark"):
+    def __init__(self, map_style: str = "dark"):
         super().__init__(expand=True, padding=0)
-        self.basin_name = basin_name
         self.map_style = map_style
-        self._df = None
-        self._last_center = None
-        self._last_zoom = None
-
-        self._loading = ft.ProgressBar(width=1000, color="#00BFFF")
-        self._loading_text = ft.Text(f"Loading map for {basin_name}...", color="#ccc", size=13)
-
-        self._surface_chk = ft.Checkbox(label="Surface Holes", value=True, on_change=self._update_map)
-        self._laterals_chk = ft.Checkbox(label="Laterals", value=False, on_change=self._update_map)
-        self._filter_row = ft.Row(
-            [ft.Text("Source:", color="#ccc"), self._surface_chk, self._laterals_chk],
-            alignment=ft.MainAxisAlignment.START,
-            spacing=15,
-        )
+        self._last_center = (33.0, -103.0)   # Default center (lon, lat)
+        self._last_zoom = 6
 
         self._chart_container = ft.Container(
             width=1000,
@@ -98,109 +85,45 @@ class MapPanel(ft.Container):
             bgcolor="#0B132B",
             border_radius=10,
             border=ft.border.all(1, "#333"),
-            content=ft.Column(
-                [
-                    ft.Container(height=20),
-                    ft.Row([self._loading], alignment=ft.MainAxisAlignment.CENTER),
-                    ft.Row([self._loading_text], alignment=ft.MainAxisAlignment.CENTER),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                expand=True,
-            ),
         )
 
-        self.content = ft.Column([self._filter_row, self._chart_container], spacing=8, expand=True)
+        self.content = ft.Column(
+            [
+                ft.Text("Spacing Project Map", color="#ccc", size=16),
+                self._chart_container
+            ],
+            spacing=8,
+            expand=True
+        )
 
-    # ---------- Async loader ----------
-    def load(self):
-        threading.Thread(target=self._load_async, daemon=True).start()
+        self._draw_blank_map()
 
-    def _load_async(self):
-        try:
-            px.set_mapbox_access_token(MAPBOX_TOKEN)
-            df = _load_shapefiles_fast(self.basin_name)
-            self._df = df
-            time.sleep(0.3)
-            if df.empty:
-                self._loading_text.value = f"No shapefiles found for {self.basin_name}"
-                self.update()
-                return
-            self._draw_map(df[df["Source"] == "Surface_Hole"])
-        except Exception as ex:
-            self._loading_text.value = f"❌ Error loading: {ex}"
-            print(f"❌ Error loading map: {ex}")
-            self.update()
+    def _draw_blank_map(self):
+        import plotly.express as px
+        px.set_mapbox_access_token(MAPBOX_TOKEN)
 
-    # ---------- Update toggles ----------
-    def _update_map(self, e=None):
-        if self._df is None or self._df.empty:
-            return
-        sources = []
-        if self._surface_chk.value:
-            sources.append("Surface_Hole")
-        if self._laterals_chk.value:
-            sources.append("Laterals")
-        if not sources:
-            self._chart_container.content = ft.Container(
-                width=1000, height=500, bgcolor="#0B132B",
-                content=ft.Row([ft.Text("No sources selected.", color="#ccc")],
-                               alignment=ft.MainAxisAlignment.CENTER),
-            )
-            self.update()
-            return
-        self._draw_map(self._df[self._df["Source"].isin(sources)])
-
-    # ---------- Draw map ----------
-    def _draw_map(self, df: pd.DataFrame):
-        if df.empty:
-            self._chart_container.content = ft.Container(
-                width=1000, height=500, bgcolor="#0B132B",
-                content=ft.Row([ft.Text("No wells to display.", color="#ccc")],
-                               alignment=ft.MainAxisAlignment.CENTER),
-            )
-            self.update()
-            return
-
-        # Compute bounds
-        lat_min, lat_max = df["Latitude"].min(), df["Latitude"].max()
-        lon_min, lon_max = df["Longitude"].min(), df["Longitude"].max()
-        center_lat, center_lon = (lat_min + lat_max) / 2, (lon_min + lon_max) / 2
-
-        lat_span, lon_span = max(lat_max - lat_min, 0.01), max(lon_max - lon_min, 0.01)
-        zoom = 9 - max(lat_span, lon_span) * 40
-        zoom = max(3.5, min(11.5, zoom))
-
-        if self._last_center is not None:
-            center_lat, center_lon = self._last_center
-            zoom = self._last_zoom
-
+        # Create an empty Plotly Mapbox figure
         fig = px.scatter_mapbox(
-            df,
-            lat="Latitude",
-            lon="Longitude",
-            color="Source",
-            color_discrete_map={"Surface_Hole": "#00BFFF", "Laterals": "#FF8C00"},
-            hover_data={"Latitude": ':.4f', "Longitude": ':.4f'},
+            lat=[],
+            lon=[],
             height=500,
-            width=1000,
+            width=1000
         )
-
         fig.update_layout(
             mapbox=dict(
                 accesstoken=MAPBOX_TOKEN,
                 style=self.map_style,
-                center=dict(lat=center_lat, lon=center_lon),
-                zoom=zoom,
+                center=dict(lat=self._last_center[0], lon=self._last_center[1]),
+                zoom=self._last_zoom,
             ),
             margin=dict(l=0, r=0, t=0, b=0),
             paper_bgcolor="#0B132B",
-            legend=dict(bgcolor="rgba(17,17,17,0.66)", font=dict(color="#ccc")),
         )
 
-        # ✅ Use compatibility wrapper (interactive on web, fallback locally)
         self._chart_container.content = get_plotly_chart(fig, expand=True)
         self.update()
+
+
 
         # Store for persistence
         self._last_center = (center_lat, center_lon)
