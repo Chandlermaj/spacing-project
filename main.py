@@ -8,6 +8,13 @@ import pandas as pd
 from benches_data import load_benches, basins_list, benches_for_basin
 from benches_ui import IntervalSelector
 from map_view import MapPanel
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def home():
+    return {"message": "Hello from Railway!"}
 
 
 APP_NAME = "Well Spacing"
