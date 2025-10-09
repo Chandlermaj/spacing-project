@@ -253,11 +253,16 @@ def main(page: ft.Page):
         active_tab = "map"
         map_style_dd.visible = True
         map_style = map_style_dd.value or "dark"
+
         map_panel = MapPanel(map_style)
         center_panel.content = map_panel
         style_nav()
         set_status("Map view active")
         page.update()
+
+        # ✅ Draw the map AFTER it's been attached to the page
+        page.run_task(lambda: map_panel._draw_blank_map())
+
 
     benches_btn.on_click = lambda e: show_benches()
     map_btn.on_click = lambda e: show_map()
@@ -272,4 +277,9 @@ def main(page: ft.Page):
 # Run App
 # --------------------------
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(
+        target=main,
+        view=ft.AppView.WEB_BROWSER,  # Launch in browser when local
+        port=8000                      # Run on same port as FastAPI
+    )
+

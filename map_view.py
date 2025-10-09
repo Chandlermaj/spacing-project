@@ -67,4 +67,3 @@ class MapPanel(ft.Container):
 
         # Display the map in the chart container
         self._chart_container.content = get_plotly_chart(fig, expand=True)
-        self.update()

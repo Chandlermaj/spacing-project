@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Spacing Project Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+  <style>
+    body { margin:0; padding:0; }
+    #map { position:absolute; top:0; bottom:0; width:100%; }
+    .mapboxgl-ctrl-top-right { margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoiY2hhbmRsZXJtYWoiLCJhIjoiY2xqbjV6N3gyMTIwbzNscW1ldXNrdGgybSJ9.dVuuiCN9yxDM8NMyE56qww';  // 🔹 Replace this with your real Mapbox token
+const API_BASE = 'https://spacing-project-production.up.railway.app';  // Your live FastAPI backend
+
+// Initialize the map
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/dark-v11',
+  center: [-103, 33],
+  zoom: 6
+});
+
+// Load wells when map finishes loading
+function loadWells() {
+  const b = map.getBounds();
+  const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',');
+  const url = `${API_BASE}/wells?bbox=${bbox}`;
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (map.getSource('wells')) {
+        map.getSource('wells').setData(data);
+      } else {
+        map.addSource('wells', { type: 'geojson', data: data });
+        map.addLayer({
+          id: 'wells-layer',
+          type: 'circle',
+          source: 'wells',
+          paint: {
+            'circle-radius': 5,
+            'circle-color': '#ff9933',
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#fff'
+          }
+        });
+      }
+    })
+    .catch(err => console.error('Error fetching wells:', err));
+}
+
+// Load wells on start and every time you move
+map.on('load', loadWells);
+map.on('moveend', loadWells);
+</script>
+</body>
+</html>
