@@ -26,6 +26,7 @@ WORKDIR /app
 # ---------------------------------------------------------------
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+    RUN pip install flet-web==0.28.3
 
 # ---------------------------------------------------------------
 # 5. Copy project files
