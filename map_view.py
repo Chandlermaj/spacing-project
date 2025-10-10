@@ -48,10 +48,18 @@ class MapPanel(ft.Container):
             expand=True,
         )
 
-        # Draw initial blank map
-        self._draw_map([])
-        # Load wells inside default bounding box
-        self.load_visible_wells(self._current_bbox)
+        # Defer drawing until added to page
+        self._pending_draw = True
+
+    # -----------------------------------------------------------
+    # Flet lifecycle hook: called once added to a page
+    # -----------------------------------------------------------
+    def did_mount(self):
+        """Safely run once the control has been added to the page."""
+        if self._pending_draw:
+            self._pending_draw = False
+            self._draw_map([])  # draw blank map
+            self.load_visible_wells(self._current_bbox)
 
     # -----------------------------------------------------------
     # Fetch wells from backend API (Railway FastAPI service)
@@ -113,4 +121,6 @@ class MapPanel(ft.Container):
         )
 
         self._chart_container.content = get_plotly_chart(fig)
-        self.update()
+        # only update if already mounted
+        if self.page:
+            self.update()
