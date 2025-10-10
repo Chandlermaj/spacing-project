@@ -4,7 +4,7 @@
 FROM python:3.11-slim
 
 # ---------------------------------------------------------------
-# 2. Install system dependencies (Chrome + fonts + supervisor)
+# 2. Install Chrome + fonts + supervisor
 # ---------------------------------------------------------------
 RUN apt-get update && \
     apt-get install -y wget gnupg ca-certificates fonts-liberation libnss3 supervisor && \
@@ -22,18 +22,18 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ---------------------------------------------------------------
-# 4. Install Python dependencies
+# 4. Python dependencies
 # ---------------------------------------------------------------
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ---------------------------------------------------------------
-# 5. Copy your code
+# 5. Copy project
 # ---------------------------------------------------------------
 COPY . .
 
 # ---------------------------------------------------------------
-# 6. Supervisor configuration
+# 6. Supervisor config
 # ---------------------------------------------------------------
 RUN mkdir -p /etc/supervisor/conf.d
 COPY <<EOF /etc/supervisor/conf.d/spacing.conf
@@ -48,7 +48,7 @@ stdout_logfile=/dev/stdout
 stderr_logfile=/dev/stderr
 
 [program:flet]
-command=python -m flet fastapi main.py
+command=python main.py
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -56,13 +56,13 @@ stderr_logfile=/dev/stderr
 EOF
 
 # ---------------------------------------------------------------
-# 7. Expose ports (FastAPI & Flet web)
+# 7. Ports
 # ---------------------------------------------------------------
 EXPOSE 8000
 EXPOSE 8550
 
 # ---------------------------------------------------------------
-# 8. Environment variables (Railway overrides these)
+# 8. Environment
 # ---------------------------------------------------------------
 ENV PYTHONUNBUFFERED=1 \
     PATH="/usr/bin/google-chrome:$PATH" \
@@ -77,6 +77,6 @@ ENV PYTHONUNBUFFERED=1 \
 RUN google-chrome --version || echo "⚠️ Chrome not found!"
 
 # ---------------------------------------------------------------
-# 10. Run both FastAPI and Flet
+# 10. Start both FastAPI and Flet
 # ---------------------------------------------------------------
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/spacing.conf"]
