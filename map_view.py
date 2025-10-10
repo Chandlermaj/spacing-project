@@ -7,29 +7,23 @@ import plotly.express as px
 import plotly.io as pio
 
 # ===============================================================
-# Force JS-based interactive rendering (disable Kaleido)
+# Force full HTML renderer (true JS interactivity)
 # ===============================================================
 pio.kaleido.scope = None
-pio.renderers.default = "plotly_mimetype+notebook_connected+json"
+pio.renderers.default = "plotly_html"  # <-- This is the key fix
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 
 
-# ===============================================================
-# Utility: Always return an interactive PlotlyChart
-# ===============================================================
 def get_plotly_chart(fig):
-    """Return a PlotlyChart that stays interactive."""
+    """Return a PlotlyChart that uses the HTML renderer for full interactivity."""
     try:
         return PlotlyChart(fig, expand=True, interactive=True)
     except TypeError:
-        print("⚠️ Fallback PlotlyChart (old Flet version)")
+        # Old Flet fallback — still HTML based
         return PlotlyChart(fig, expand=True)
 
 
-# ===============================================================
-# MapPanel: interactive Mapbox map with Enverus-style zoom/pan
-# ===============================================================
 class MapPanel(ft.Container):
     """Interactive Mapbox panel for visualizing wells dynamically."""
 
@@ -45,7 +39,7 @@ class MapPanel(ft.Container):
         )
 
         self.map_style = map_style
-        self._current_bbox = [-106, 31, -101, 35]  # Default Delaware region
+        self._current_bbox = [-106, 31, -101, 35]
         self._chart_container = ft.Container(expand=True)
         self._pending_draw = True
 
@@ -60,7 +54,7 @@ class MapPanel(ft.Container):
         )
 
     # -----------------------------------------------------------
-    # Lifecycle: only draw after added to page
+    # Flet lifecycle hook: draw only after being added to the page
     # -----------------------------------------------------------
     def did_mount(self):
         if self._pending_draw:
@@ -73,13 +67,11 @@ class MapPanel(ft.Container):
     # -----------------------------------------------------------
     def load_visible_wells(self, bbox):
         bbox_str = ",".join(map(str, bbox))
-        api_url = os.getenv("API_URL", "http://127.0.0.1:8000")
-        if not api_url.startswith("http"):
-            api_url = f"https://{api_url}"
-
+        # Always call the local backend
+        api_url = "http://127.0.0.1:8000"
         url = f"{api_url}/wells_bbox?bbox={bbox_str}"
-        print(f"📡 Fetching wells for bbox {bbox_str} from {url}")
 
+        print(f"📡 Fetching wells for bbox {bbox_str} from {url}")
         try:
             resp = requests.get(url)
             wells = resp.json()
@@ -97,7 +89,7 @@ class MapPanel(ft.Container):
         self._draw_map(list(zip(lats, lons)))
 
     # -----------------------------------------------------------
-    # Draw interactive Mapbox map
+    # Draw the fully interactive Mapbox map
     # -----------------------------------------------------------
     def _draw_map(self, points):
         if points:
@@ -112,13 +104,11 @@ class MapPanel(ft.Container):
             height=520,
         )
 
-        # Marker styling
         fig.update_traces(
             marker=dict(size=8, color="#00FFFF", opacity=0.8),
             hovertemplate="Lat: %{lat}<br>Lon: %{lon}<extra></extra>",
         )
 
-        # Map style + controls
         fig.update_layout(
             mapbox=dict(
                 accesstoken=MAPBOX_TOKEN,
@@ -145,7 +135,6 @@ class MapPanel(ft.Container):
             zoom = max(5, 8 - bbox_span * 10)
             fig.update_layout(mapbox_zoom=zoom)
 
-        # Assign + update
         self._chart_container.content = get_plotly_chart(fig)
         if self.page:
             self.update()
