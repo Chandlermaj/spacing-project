@@ -7,20 +7,19 @@ import plotly.express as px
 import plotly.io as pio
 
 # ===============================================================
-# Force full HTML renderer (true JS interactivity)
+# Enable interactive JS rendering (iframe mode)
 # ===============================================================
 pio.kaleido.scope = None
-pio.renderers.default = "plotly_html"  # <-- This is the key fix
+pio.renderers.default = "iframe_connected"  # ✅ stable JS-based renderer
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 
 
 def get_plotly_chart(fig):
-    """Return a PlotlyChart that uses the HTML renderer for full interactivity."""
+    """Return a PlotlyChart that stays interactive in the web app."""
     try:
         return PlotlyChart(fig, expand=True, interactive=True)
     except TypeError:
-        # Old Flet fallback — still HTML based
         return PlotlyChart(fig, expand=True)
 
 
@@ -39,13 +38,18 @@ class MapPanel(ft.Container):
         )
 
         self.map_style = map_style
-        self._current_bbox = [-106, 31, -101, 35]
+        self._current_bbox = [-106, 31, -101, 35]  # Default Delaware region
         self._chart_container = ft.Container(expand=True)
         self._pending_draw = True
 
         self.content = ft.Column(
             [
-                ft.Text("Spacing Project Map", color="#ccc", size=16, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    "Spacing Project Map",
+                    color="#ccc",
+                    size=16,
+                    weight=ft.FontWeight.BOLD,
+                ),
                 self._chart_container,
             ],
             alignment=ft.MainAxisAlignment.START,
@@ -54,7 +58,7 @@ class MapPanel(ft.Container):
         )
 
     # -----------------------------------------------------------
-    # Flet lifecycle hook: draw only after being added to the page
+    # Lifecycle hook: draw once mounted
     # -----------------------------------------------------------
     def did_mount(self):
         if self._pending_draw:
@@ -63,12 +67,11 @@ class MapPanel(ft.Container):
             self.load_visible_wells(self._current_bbox)
 
     # -----------------------------------------------------------
-    # Fetch wells from backend
+    # Fetch wells from backend (local FastAPI)
     # -----------------------------------------------------------
     def load_visible_wells(self, bbox):
         bbox_str = ",".join(map(str, bbox))
-        # Always call the local backend
-        api_url = "http://127.0.0.1:8000"
+        api_url = "http://127.0.0.1:8000"  # ✅ local container API
         url = f"{api_url}/wells_bbox?bbox={bbox_str}"
 
         print(f"📡 Fetching wells for bbox {bbox_str} from {url}")
@@ -89,7 +92,7 @@ class MapPanel(ft.Container):
         self._draw_map(list(zip(lats, lons)))
 
     # -----------------------------------------------------------
-    # Draw the fully interactive Mapbox map
+    # Draw fully interactive Mapbox map
     # -----------------------------------------------------------
     def _draw_map(self, points):
         if points:
@@ -126,7 +129,7 @@ class MapPanel(ft.Container):
             clickmode="event+select",
         )
 
-        # --- Auto-fit zoom if wells exist ---
+        # --- Auto-fit zoom ---
         if lats and lons:
             lat_center = (max(lats) + min(lats)) / 2
             lon_center = (max(lons) + min(lons)) / 2
