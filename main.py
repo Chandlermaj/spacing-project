@@ -1,9 +1,9 @@
 from __future__ import annotations
 import os
 import flet as ft
+import flet.fastapi as flet_fastapi
 import pandas as pd
-import geojson
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from benches_data import load_benches, basins_list, benches_for_basin
@@ -11,10 +11,10 @@ from benches_ui import IntervalSelector
 from map_view import MapPanel
 
 # ------------------------------------------------------------------
-# 1. Load environment variables
+# 1. Environment variables
 # ------------------------------------------------------------------
 from dotenv import load_dotenv
-load_dotenv()  # Helps locally; Railway injects automatically
+load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
@@ -27,14 +27,14 @@ print(f"🔍 MAPBOX_TOKEN starts with: {str(MAPBOX_TOKEN)[:8]}")
 print(f"🔍 API_URL = {API_URL}")
 
 # ------------------------------------------------------------------
-# 2. Initialize Supabase client
+# 2. Supabase setup
 # ------------------------------------------------------------------
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 # ------------------------------------------------------------------
 # 3. FastAPI setup
 # ------------------------------------------------------------------
-app = FastAPI(title="Spacing Project API")
+app = FastAPI(title="Spacing Project")
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,17 +44,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-def home():
-    return {"message": "Hello from Railway + Supabase!"}
-
 
 # ------------------------------------------------------------------
-# 4. Wells endpoint (live from Supabase)
+# 4. Wells endpoint (for backend access)
 # ------------------------------------------------------------------
 @app.get("/wells")
 def get_wells(limit: int = 1000):
-    """Return well data from Supabase."""
     print("📡 Fetching wells from Supabase...")
     try:
         response = supabase.table("wells").select("*").limit(limit).execute()
@@ -67,7 +62,7 @@ def get_wells(limit: int = 1000):
 
 
 # ------------------------------------------------------------------
-# 5. Flet UI App
+# 5. Flet UI
 # ------------------------------------------------------------------
 APP_NAME = "Well Spacing"
 DEFAULT_BASIN = "Delaware"
@@ -116,23 +111,19 @@ def main(page: ft.Page):
     def show_map(e=None):
         basin = basin_dd.value or DEFAULT_BASIN
         style = map_style_dd.value or "dark"
-
-        # Create and display the map panel
         map_panel = MapPanel(basin, style)
         center_panel.content = map_panel
-        page.update()          # ✅ must update first
+        page.update()
 
     benches_btn.on_click = show_benches
     map_btn.on_click = show_map
 
     header = ft.Row([basin_dd, map_style_dd, benches_btn, map_btn], spacing=12)
     page.add(header, ft.Divider(), center_panel)
-
-    # ✅ Start safely with map
     show_map()
 
 # ------------------------------------------------------------------
-# 6. Run App
+# 6. Combine FastAPI + Flet
 # ------------------------------------------------------------------
-if __name__ == "__main__":
-    ft.app(target=main)
+flet_app = flet_fastapi.FastAPIApp(app=app, target=main)
+app.mount("/", flet_app)
