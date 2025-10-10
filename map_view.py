@@ -7,7 +7,7 @@ import plotly.express as px
 import plotly.io as pio
 
 # ===============================================================
-# Disable Kaleido and force JS-based interactive rendering
+# Force JS-based interactive rendering (disable static Kaleido)
 # ===============================================================
 pio.kaleido.scope = None
 pio.renderers.default = "plotly_mimetype+notebook_connected+json"
@@ -19,56 +19,62 @@ MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 # Utility: Always return an interactive PlotlyChart
 # ===============================================================
 def get_plotly_chart(fig):
-    """Return a PlotlyChart that stays interactive even in web builds."""
+    """Return a PlotlyChart that stays interactive in the web app."""
     try:
         return PlotlyChart(fig, expand=True, interactive=True)
     except TypeError:
-        print("⚠️ Fallback PlotlyChart (no 'interactive' param supported)")
+        print("⚠️ Fallback PlotlyChart (old Flet version)")
         return PlotlyChart(fig, expand=True)
 
 
 # ===============================================================
-# MapPanel: main interactive map component
+# MapPanel: interactive map with fixed size and smooth controls
 # ===============================================================
 class MapPanel(ft.Container):
-    """Map view panel that fetches wells dynamically from Supabase API."""
+    """Interactive Mapbox panel for visualizing wells dynamically."""
 
     def __init__(self, map_style="dark"):
-        super().__init__(expand=True, padding=0)
+        super().__init__(
+            expand=False,
+            width=1000,           # controls width of the map area
+            height=600,           # fixed height so it’s not massive
+            alignment=ft.alignment.center,
+            border_radius=12,
+            bgcolor="#1e1e1e",
+            padding=8,
+        )
+
         self.map_style = map_style
-        self._current_bbox = [-106, 31, -101, 35]  # Default Delaware view
+        self._current_bbox = [-106, 31, -101, 35]  # Default Delaware region
         self._chart_container = ft.Container(expand=True)
+        self._pending_draw = True
 
         self.content = ft.Column(
             [
-                ft.Text("Spacing Project Map", color="#ccc", size=16),
+                ft.Text("Spacing Project Map", color="#ccc", size=16, weight=ft.FontWeight.BOLD),
                 self._chart_container,
             ],
-            spacing=8,
+            alignment=ft.MainAxisAlignment.START,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             expand=True,
         )
 
-        # Defer drawing until added to page
-        self._pending_draw = True
-
     # -----------------------------------------------------------
-    # Flet lifecycle hook: called once added to a page
+    # Flet lifecycle hook: only run after being added to page
     # -----------------------------------------------------------
     def did_mount(self):
-        """Safely run once the control has been added to the page."""
         if self._pending_draw:
             self._pending_draw = False
-            self._draw_map([])  # draw blank map
+            self._draw_map([])  # blank base map
             self.load_visible_wells(self._current_bbox)
 
     # -----------------------------------------------------------
-    # Fetch wells from backend API (Railway FastAPI service)
+    # Fetch wells from backend (FastAPI endpoint)
     # -----------------------------------------------------------
     def load_visible_wells(self, bbox):
         bbox_str = ",".join(map(str, bbox))
         api_url = os.getenv("API_URL", "http://127.0.0.1:8000")
 
-        # Ensure the API URL has a scheme
         if not api_url.startswith("http"):
             api_url = f"https://{api_url}"
 
@@ -92,7 +98,7 @@ class MapPanel(ft.Container):
         self._draw_map(list(zip(lats, lons)))
 
     # -----------------------------------------------------------
-    # Draw Plotly map (interactive)
+    # Draw map with full interactivity and controlled zoom/size
     # -----------------------------------------------------------
     def _draw_map(self, points):
         if points:
@@ -100,13 +106,20 @@ class MapPanel(ft.Container):
         else:
             lats, lons = [], []
 
+        # Create an interactive scatter mapbox
         fig = px.scatter_mapbox(
             lat=lats,
             lon=lons,
             zoom=7,
-            height=None,  # auto-resize
+            height=580,  # keeps it clean and consistent
         )
 
+        fig.update_traces(
+            marker=dict(size=8, color="#00FFFF", opacity=0.8),
+            hovertemplate="Lat: %{lat}<br>Lon: %{lon}<extra></extra>",
+        )
+
+        # Make it behave like Enverus: scroll zoom, drag pan, double-click zoom reset
         fig.update_layout(
             mapbox=dict(
                 accesstoken=MAPBOX_TOKEN,
@@ -118,9 +131,22 @@ class MapPanel(ft.Container):
                 zoom=7,
             ),
             margin=dict(l=0, r=0, t=0, b=0),
+            dragmode="pan",
+            uirevision=True,
         )
 
+        fig.update_layout(
+            mapbox_zoom=7,
+            mapbox_center={"lat": 32, "lon": -103},
+        )
+
+        # Enable scroll zoom and responsive resize
+        fig.update_layout(
+            modebar_add=["zoom", "pan", "resetViewMapbox", "toImage"],
+            clickmode="event+select",
+        )
+
+        # Assign and update safely
         self._chart_container.content = get_plotly_chart(fig)
-        # only update if already mounted
         if self.page:
             self.update()
