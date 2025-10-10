@@ -12,9 +12,9 @@ from map_view import MapPanel
 from dotenv import load_dotenv
 import uvicorn
 
-# ------------------------------------------------------------------
+# ===============================================================
 # 1. Environment
-# ------------------------------------------------------------------
+# ===============================================================
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
@@ -24,14 +24,14 @@ API_URL = os.getenv("API_URL")
 print(f"🔍 SUPABASE_URL = {SUPABASE_URL}")
 print(f"🔍 MAPBOX_TOKEN starts with: {str(MAPBOX_TOKEN)[:8]}")
 
-# ------------------------------------------------------------------
+# ===============================================================
 # 2. Supabase client
-# ------------------------------------------------------------------
+# ===============================================================
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-# ------------------------------------------------------------------
+# ===============================================================
 # 3. FastAPI backend
-# ------------------------------------------------------------------
+# ===============================================================
 app = FastAPI(title="Spacing Project API")
 
 app.add_middleware(
@@ -59,9 +59,24 @@ def get_wells(limit: int = 1000):
         print(f"❌ Supabase fetch error: {e}")
         return {"error": str(e)}
 
-# ------------------------------------------------------------------
+@app.get("/wells_bbox")
+def wells_bbox(bbox: str):
+    """
+    Temporary endpoint to simulate spatial filtering.
+    Replace with real Supabase query later.
+    """
+    print(f"➡️  /wells_bbox received bbox={bbox}")
+    # Static fake wells for testing
+    return [
+        {"Latitude": 31.8, "Longitude": -103.4},
+        {"Latitude": 32.1, "Longitude": -103.0},
+        {"Latitude": 31.6, "Longitude": -102.7},
+        {"Latitude": 31.9, "Longitude": -103.2},
+    ]
+
+# ===============================================================
 # 4. Flet Web App
-# ------------------------------------------------------------------
+# ===============================================================
 APP_NAME = "Well Spacing"
 DEFAULT_BASIN = "Delaware"
 
@@ -74,6 +89,7 @@ def main(page: ft.Page):
     page.scroll = ft.ScrollMode.AUTO
 
     benches_df = load_benches()
+
     basin_dd = ft.Dropdown(
         label="Basin",
         options=[ft.dropdown.Option(b) for b in basins_list(benches_df)],
@@ -94,7 +110,7 @@ def main(page: ft.Page):
 
     benches_btn = ft.TextButton("△ Benches")
     map_btn = ft.TextButton("🗺️ Map")
-    center_panel = ft.Container(expand=True)
+    center_panel = ft.Container(expand=True, alignment=ft.alignment.center)
 
     def show_benches(e=None):
         subset = benches_for_basin(benches_df, basin_dd.value)
@@ -103,7 +119,6 @@ def main(page: ft.Page):
         page.update()
 
     def show_map(e=None):
-        basin = basin_dd.value or DEFAULT_BASIN
         style = map_style_dd.value or "dark"
         map_panel = MapPanel(style)
         center_panel.content = map_panel
@@ -115,15 +130,12 @@ def main(page: ft.Page):
     page.add(header, ft.Divider(), center_panel)
     show_map()
 
-# ------------------------------------------------------------------
+# ===============================================================
 # 5. Run both backend + UI together
-# ------------------------------------------------------------------
+# ===============================================================
 if __name__ == "__main__":
-    # Launch FastAPI in a background thread
     threading.Thread(
         target=lambda: uvicorn.run(app, host="0.0.0.0", port=8000),
         daemon=True,
     ).start()
-
-    # Launch Flet web app (port 8550)
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8550)
