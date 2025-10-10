@@ -4,7 +4,7 @@
 FROM python:3.11-slim
 
 # ---------------------------------------------------------------
-# 2. Install system dependencies (Google Chrome + fonts)
+# 2. Install Google Chrome and required system libs
 # ---------------------------------------------------------------
 RUN apt-get update && \
     apt-get install -y wget gnupg ca-certificates fonts-liberation libnss3 && \
@@ -22,24 +22,25 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ---------------------------------------------------------------
-# 4. Copy dependencies and install Python packages
+# 4. Install Python dependencies (Flet 0.28.3 + flet-web 0.28.3)
 # ---------------------------------------------------------------
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-    RUN pip install flet-web==0.28.3
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install flet==0.28.3 flet-web==0.28.3
 
 # ---------------------------------------------------------------
-# 5. Copy project files
+# 5. Copy project code
 # ---------------------------------------------------------------
 COPY . .
 
 # ---------------------------------------------------------------
-# 6. Expose port (FastAPI + Flet share same app)
+# 6. Expose both ports
 # ---------------------------------------------------------------
-EXPOSE 8000
+EXPOSE 8000     # FastAPI backend
+EXPOSE 8550     # Flet web UI
 
 # ---------------------------------------------------------------
-# 7. Environment variables (Railway injects these automatically)
+# 7. Environment variables
 # ---------------------------------------------------------------
 ENV PYTHONUNBUFFERED=1 \
     PATH="/usr/bin/google-chrome:$PATH" \
@@ -49,11 +50,11 @@ ENV PYTHONUNBUFFERED=1 \
     API_URL=${API_URL}
 
 # ---------------------------------------------------------------
-# 8. Verify Chrome installation (optional)
+# 8. Verify Chrome (optional)
 # ---------------------------------------------------------------
 RUN google-chrome --version || echo "⚠️ Chrome not found!"
 
 # ---------------------------------------------------------------
-# 9. Start the unified FastAPI + Flet app
+# 9. Run FastAPI (port 8000) + Flet Web UI (port 8550)
 # ---------------------------------------------------------------
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "main.py"]
