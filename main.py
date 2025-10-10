@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import threading
 import flet as ft
 import pandas as pd
 from fastapi import FastAPI
@@ -9,9 +10,10 @@ from benches_data import load_benches, basins_list, benches_for_basin
 from benches_ui import IntervalSelector
 from map_view import MapPanel
 from dotenv import load_dotenv
+import uvicorn
 
 # ------------------------------------------------------------------
-# 1. Environment variables
+# 1. Environment
 # ------------------------------------------------------------------
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -19,13 +21,16 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 API_URL = os.getenv("API_URL")
 
+print(f"🔍 SUPABASE_URL = {SUPABASE_URL}")
+print(f"🔍 MAPBOX_TOKEN starts with: {str(MAPBOX_TOKEN)[:8]}")
+
 # ------------------------------------------------------------------
-# 2. Supabase setup
+# 2. Supabase client
 # ------------------------------------------------------------------
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 # ------------------------------------------------------------------
-# 3. FastAPI backend (for Supabase endpoints)
+# 3. FastAPI backend
 # ------------------------------------------------------------------
 app = FastAPI(title="Spacing Project API")
 
@@ -36,6 +41,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def root():
+    return {"message": "Backend running — UI is on / (port 8550)"}
 
 @app.get("/wells")
 def get_wells(limit: int = 1000):
@@ -51,7 +60,7 @@ def get_wells(limit: int = 1000):
         return {"error": str(e)}
 
 # ------------------------------------------------------------------
-# 4. Flet UI app (runs separately)
+# 4. Flet Web App
 # ------------------------------------------------------------------
 APP_NAME = "Well Spacing"
 DEFAULT_BASIN = "Delaware"
@@ -71,7 +80,6 @@ def main(page: ft.Page):
         value=DEFAULT_BASIN,
         width=320,
     )
-
     map_style_dd = ft.Dropdown(
         label="Map Style",
         options=[
@@ -108,15 +116,14 @@ def main(page: ft.Page):
     show_map()
 
 # ------------------------------------------------------------------
-# 5. Run the Flet Web UI
+# 5. Run both backend + UI together
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    # Start both FastAPI (backend) and Flet (frontend) separately
-    import threading
-    import uvicorn
+    # Launch FastAPI in a background thread
+    threading.Thread(
+        target=lambda: uvicorn.run(app, host="0.0.0.0", port=8000),
+        daemon=True,
+    ).start()
 
-    def run_fastapi():
-        uvicorn.run(app, host="0.0.0.0", port=8000)
-
-    threading.Thread(target=run_fastapi, daemon=True).start()
+    # Launch Flet web app (port 8550)
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8550)

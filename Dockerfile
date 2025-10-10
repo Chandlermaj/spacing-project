@@ -1,10 +1,10 @@
 # ===============================================================
-# 1. Base image
+# Base image
 # ===============================================================
 FROM python:3.11-slim
 
 # ---------------------------------------------------------------
-# 2. Install Google Chrome and required system libs
+# Install Chrome + fonts for Plotly/Kaleido
 # ---------------------------------------------------------------
 RUN apt-get update && \
     apt-get install -y wget gnupg ca-certificates fonts-liberation libnss3 && \
@@ -17,44 +17,35 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------
-# 3. Working directory
+# Working directory
 # ---------------------------------------------------------------
 WORKDIR /app
 
 # ---------------------------------------------------------------
-# 4. Install Python dependencies (Flet 0.28.3 + flet-web 0.28.3)
+# Install dependencies
 # ---------------------------------------------------------------
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install flet==0.28.3 flet-web==0.28.3
 
 # ---------------------------------------------------------------
-# 5. Copy project code
+# Copy project files
 # ---------------------------------------------------------------
 COPY . .
 
 # ---------------------------------------------------------------
-# 6. Expose both ports
+# Expose both ports (FastAPI + Flet)
 # ---------------------------------------------------------------
-EXPOSE 8000     # FastAPI backend
-EXPOSE 8550     # Flet web UI
+EXPOSE 8000
+EXPOSE 8550
 
 # ---------------------------------------------------------------
-# 7. Environment variables
+# Environment variables
 # ---------------------------------------------------------------
 ENV PYTHONUNBUFFERED=1 \
-    PATH="/usr/bin/google-chrome:$PATH" \
-    SUPABASE_URL=${SUPABASE_URL} \
-    SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY} \
-    MAPBOX_TOKEN=${MAPBOX_TOKEN} \
-    API_URL=${API_URL}
+    PATH="/usr/bin/google-chrome:$PATH"
 
 # ---------------------------------------------------------------
-# 8. Verify Chrome (optional)
-# ---------------------------------------------------------------
-RUN google-chrome --version || echo "⚠️ Chrome not found!"
-
-# ---------------------------------------------------------------
-# 9. Run FastAPI (port 8000) + Flet Web UI (port 8550)
+# Run both apps (Flet UI will be main entrypoint)
 # ---------------------------------------------------------------
 CMD ["python", "main.py"]
